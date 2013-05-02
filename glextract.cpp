@@ -31,7 +31,7 @@
 #include <sstream>
 #ifdef USE_BOOST
 	#include <boost/regex.hpp>
-	const boost::regex re_proto("^GLAPI\\s+void\\s+APIENTRY\\s+([a-zA-Z0-9_]+)"),
+	const boost::regex re_proto("^GLAPI\\s+(?:[a-zA-Z0-9_]+)\\s+APIENTRY\\s+([a-zA-Z0-9_]+)"),
 			re_endif("^#endif");
 	int main() {
 		using boost::regex;
@@ -39,7 +39,7 @@
 		using boost::regex_search;
 #else
 	#include <regex>
-	const std::regex re_proto("^GLAPI\\s+void\\s+APIENTRY\\s+(\\[a-zA-Z0-9_\\]+)"),
+	const std::regex re_proto("^GLAPI\\s+(?:\\[a-zA-Z0-9_\\]+)\\s+APIENTRY\\s+(\\[a-zA-Z0-9_\\]+)"),
 			re_endif("^#endif");
 	int main() {
 		using std::regex;
