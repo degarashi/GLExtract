@@ -21,23 +21,35 @@
 	#undef GLDEFINE
 	などと宣言すると良いと思います
 
-	GCC4.7.2だとregexが未実装らしく実行時エラーを吐く（？）のでその時はboostを使うなりしてください
+	GCCだとregexが未実装らしく実行時エラーを吐く（？）っぽいのでその時はboostを使うなりしてください
+	（boostを使う時はUSE_BOOSTをdefineする）
 */
+
 #include <iostream>
 #include <string>
-#include <regex>
 #include <vector>
 #include <sstream>
-
-const std::regex re_proto("^GLAPI\\s+void\\s+APIENTRY\\s+(\\[a-zA-Z0-9_\\]+)"),
-				re_endif("^#endif");
-int main() {
-	std::cout << "HELLO";
+#ifdef USE_BOOST
+	#include <boost/regex.hpp>
+	const boost::regex re_proto("^GLAPI\\s+void\\s+APIENTRY\\s+([a-zA-Z0-9_]+)"),
+			re_endif("^#endif");
+	int main() {
+		using boost::regex;
+		using boost::smatch;
+		using boost::regex_search;
+#else
+	#include <regex>
+	const std::regex re_proto("^GLAPI\\s+void\\s+APIENTRY\\s+(\\[a-zA-Z0-9_\\]+)"),
+			re_endif("^#endif");
+	int main() {
+		using std::regex;
+		using std::std::smatch;
+		using std::regex_search;
+#endif
 	// ファイル内容を全部メモリにコピー
 	size_t sz = static_cast<size_t>(std::cin.seekg(0, std::ios::end).tellg());
 	if(sz == 0)
 		return 1;
-
 	std::string buff;
 	buff.resize(sz);
 	std::cin.seekg(0, std::ios::beg).read(&buff[0], sz);
@@ -51,28 +63,26 @@ int main() {
 		"3_\\d+",
 		"4_\\d+"
 	};
-	std::smatch res;
+	smatch res;
 	for(auto& cv : c_version) {
 		std::stringstream ss;
 		ss << "^#define\\s+GL_VERSION_" << cv << "\\s+1";
-		std::regex re_version(ss.str());
+		regex re_version(ss.str());
 		for(;;) {
 			// GLx_yのヘッダまで読み飛ばし
-			if(!std::regex_search(itr, itrE, res, re_version))
+			if(!regex_search(itr, itrE, res, re_version))
 				break;
 			itr = res.suffix().first;
 
 			// 定義の終わりを検出
-			if(!std::regex_search(itr, itrE, res, re_endif))
+			if(!regex_search(itr, itrE, res, re_endif))
 				return 1;
 			auto itrLE = res.suffix().first;
-
 			for(;;) {
 				// プロトタイプ宣言の名前を取得
-				if(!std::regex_search(itr, itrLE, res, re_proto))
+				if(!regex_search(itr, itrLE, res, re_proto))
 					break;
 				itr = res.suffix().first;
-
 				ss.str("");
 				std::string funcName = res[1].str(),
 							funcDef;
