@@ -1,0 +1,5 @@
+GL_VERSION_1_[2-9]\d*
+GL_VERSION_2_\d+
+GL_VERSION_3_\d+
+GL_VERSION4_\d+
+GL_ARB_framebuffer_object
