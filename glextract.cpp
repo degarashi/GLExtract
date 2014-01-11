@@ -24,6 +24,14 @@
 
 	GCCだとregexが未実装らしく実行時エラーを吐く（？）っぽいのでその時はboostを使うなりしてください
 	（boostを使う時はUSE_BOOSTをdefineする）
+	
+	DEF_GLMETHOD(...)は、OpenGLの関数ラッパー用に定義
+	#define DEF_GLMETHOD(ret_type, name, args, argnames) \
+		ret_type name(BOOST_PP_SEQ_ENUM(args)) { \
+			// 本当はエラーチェックなどする \
+			return name(BOOST_PP_SEQ_ENUM(argnames)); \
+		}
+	このような感じで使うが、必要なければ空マクロにしておく
 */
 
 #include <iostream>
@@ -47,27 +55,56 @@ std::string ReadAll(std::istream& st) {
 	throw std::runtime_error("can't read data from stream");
 }
 
+const std::string rs_endif("^#endif");
+struct ArgPair {
+	std::string		type_name,
+					name;
+};
+struct Func {
+	using ArgPairL = std::vector<ArgPair>;
+	ArgPairL		arg_pair;
+	std::string		name,
+					ret_type;
+};
+
 #ifdef USE_BOOST
 	#include <boost/regex.hpp>
-	const boost::regex re_proto("^GLAPI\\s+(?:[a-zA-Z0-9_]+)\\s+APIENTRY\\s+([a-zA-Z0-9_]+)"),
-			re_endif("^#endif");
+	const std::pair<boost::regex, std::string> replacePair[] = {
+		{boost::regex("@C_Alnum"), "[a-zA-Z0-9_]+"},
+		{boost::regex("@C_Arg"), "[a-zA-Z0-9_][a-zA-Z0-9_\\*& ]*"}
+	};
 	int main(int argc, char* arg[]) {
 		using boost::regex;
 		using boost::smatch;
 		using boost::regex_search;
+		using boost::regex_replace;
 #else
 	#include <regex>
-	const std::regex re_proto("^GLAPI\\s+(?:\\[a-zA-Z0-9_\\]+)\\s+APIENTRY\\s+(\\[a-zA-Z0-9_\\]+)"),
-			re_endif("^#endif");
+	const std::pair<std::regex, std::string> replacePair[] = {
+		{std::regex("@C_Alnum"), "\\[a-zA-Z0-9_\\]+"},
+		{std::regex("@C_Arg"), "\\[a-zA-Z0-9_\\]\\[a-zA-Z0-9_\\*& \\]*"}
+	};
 	int main(int argc, char* arg[]) {
 		using std::regex;
-		using std::std::smatch;
+		using std::smatch;
 		using std::regex_search;
+		using std::regex_replace;
 #endif
 	if(argc != 3) {
 		std::cout << "usage: glextract [OpenGL Header(typically, glext.h)] [output filename]" << std::endl;
 		return 0;
 	}
+	std::string rs_proto = "^GLAPI\\s+(@C_Alnum)\\s+APIENTRY\\s+(@C_Alnum)\\s*"		// GLAPI [1=ReturnType] APIENTRY [2=FuncName]
+							"\\(((?:\\s*(?:@C_Arg),?)*)\\)";						// ([3=Args...])
+	std::string rs_args = "\\s*(@C_Arg\\s+(?:&|\\*)?(@C_Alnum))";					// [1=ArgName]
+	for(auto& p : replacePair) {
+		rs_proto = regex_replace(rs_proto, p.first, p.second);
+		rs_args = regex_replace(rs_args, p.first, p.second);
+	}
+	regex re_proto(rs_proto),
+			re_args(rs_args),
+			re_endif(rs_endif);
+
 	try {
 		// 入力ファイル内容を全部メモリにコピー
 		std::ifstream ifs(arg[1]);
@@ -112,16 +149,38 @@ std::string ReadAll(std::istream& st) {
 					if(!regex_search(itr, itrLE, res, re_proto))
 						break;
 					itr = res.suffix().first;
+
+					Func func;
+					func.name = res.str(2);
+					func.ret_type = res.str(1);
+					{
+						auto itr = res[3].first,
+							itrE = res[3].second;
+						smatch res2;
+						while(regex_search(itr, itrLE, res2, re_args)) {
+							func.arg_pair.push_back(ArgPair{res2.str(1), res2.str(2)});
+							itr = res2.suffix().first;
+						}
+					}
+
 					ss.str("");
-					std::string funcName = res[1].str(),
-								funcDef;
-					funcDef.resize(funcName.size());
+					std::string funcDef;
+					funcDef.resize(func.name.size());
 					// タイプ定義の名前を作成
 					// :大文字変換
-					std::transform(funcName.cbegin(), funcName.cend(), funcDef.begin(), ::toupper);
+					std::transform(func.name.cbegin(), func.name.cend(), funcDef.begin(), ::toupper);
 					ss << "PFN" << funcDef << "PROC";
 					// タイプ定義のアウトプット
-					ofs << "GLDEFINE(" + funcName + ',' + ss.str() + ')' << std::endl;
+					ofs << "GLDEFINE(" + func.name + ',' + ss.str() + ')' << std::endl;
+
+					// GLラッパー定義のアウトプット
+					ofs << "DEF_GLMETHOD(" << func.ret_type << ", " << func.name << ", ";
+					for(auto& ap : func.arg_pair)
+						ofs << "(" << ap.type_name << ")";
+					ofs << ", ";
+					for(auto& ap : func.arg_pair)
+						ofs << "(" << ap.name << ")";
+					ofs << ')' << std::endl;
 				}
 			}
 		}
