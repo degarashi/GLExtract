@@ -1,0 +1,2 @@
+^#define\s+GL_VERSION_1_1\s+1
+^#endif.+__gl_h_

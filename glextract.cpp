@@ -41,7 +41,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <fstream>
-const static int MAX_FILESIZE = 0x100000;
+const static int MAX_FILESIZE = 0x800000;
 std::string ReadAll(std::istream& st) {
 	size_t sz = static_cast<size_t>(st.seekg(0, std::ios::end).tellg());
 	st.seekg(0, std::ios::beg);
@@ -127,9 +127,9 @@ bool CheckArgs(int argc, char* arg[]) {
 		std::cout << "usage: glextract [-a] [extraction definition file] [OpenGL Header(typically, glext.h)] [output filename]" << std::endl;
 		return 0;
 	}
-	std::string rs_proto = "^\\s*(?:GLAPI|GL_APICALL)\\s+(@C_Alnum)\\s+(?:APIENTRY|GL_APIENTRY)\\s+(@C_Alnum)\\s*"	// GLAPI [1=ReturnType] APIENTRY [2=FuncName]
-							"\\(((?:\\s*(?:@C_Arg),?)*)\\)";														// ([3=Args...])
-	std::string rs_args = "\\s*(@C_Arg\\s+(?:&|\\*)?(@C_Alnum))";													// [1=ArgName]
+	std::string rs_proto = "^\\s*(?:WINGDIAPI|GLAPI|GL_APICALL)\\s+(@C_Alnum)\\s+(?:APIENTRY|GL_APIENTRY|GLAPIENTRY)\\s+(@C_Alnum)\\s*"	// GLAPI [1=ReturnType] APIENTRY [2=FuncName]
+							"\\(((?:\\s*(?:@C_Arg),?)*)\\)";																	// ([3=Args...])
+	std::string rs_args = "\\s*(@C_Arg\\s+(?:&|\\*)?(@C_Alnum))";																// [1=ArgName]
 	std::string rs_define = "^\\s*GLDEFINE\\(\\s*(@C_Alnum)";
 
 	for(auto& p : replacePair) {
@@ -154,14 +154,19 @@ bool CheckArgs(int argc, char* arg[]) {
 		std::ifstream def(g_arg[Arg_Define]);
 		if(!def.is_open())
 			throw std::runtime_error("can't open definition-file");
-		std::ios::openmode flag = std::ios::in|std::ios::out;
-		if(g_bAppend)
-			flag |= std::ios::app;
-		else
+		std::ios::openmode flag = std::ios::in | std::ios::out;
+		if(!g_bAppend)
 			flag |= std::ios::trunc;
 		std::fstream ofs(g_arg[Arg_Output], flag);
-		if(!ofs.is_open())
-			throw std::runtime_error("can't open output-file");
+		if(!ofs.is_open()) {
+			bool bValid = false;
+			if(g_bAppend) {
+				ofs.open(g_arg[Arg_Output], flag | std::ios::trunc);
+				bValid = ofs.is_open();
+			}
+			if(!bValid)
+				throw std::runtime_error("can't open output-file");
+		}
 
 		smatch res;
 		std::unordered_set<std::string>	funcsInFile;
@@ -175,9 +180,12 @@ bool CheckArgs(int argc, char* arg[]) {
 				itr = res.suffix().first;
 			}
 		}
+		ofs.seekp(0, std::ios::end);
 
 		std::string str[2];
 		std::stringstream ss;
+		int count = 0,
+			skipcount = 0;
 		for(;;) {
 			if(def.eof())
 				break;
@@ -206,8 +214,11 @@ bool CheckArgs(int argc, char* arg[]) {
 					Func func;
 					func.name = res.str(2);
 					func.ret_type = res.str(1);
-					if(g_bAppend && funcsInFile.count(func.name)!=0)
+					if(g_bAppend && funcsInFile.count(func.name)!=0) {
+						++skipcount;
 						continue;
+					}
+					++count;
 					funcsInFile.insert(func.name);
 					{
 						auto itr = res[3].first,
@@ -232,15 +243,25 @@ bool CheckArgs(int argc, char* arg[]) {
 
 					// GLラッパー定義のアウトプット
 					ofs << "DEF_GLMETHOD(" << func.ret_type << ", " << func.name << ", ";
-					for(auto& ap : func.arg_pair)
-						ofs << "(" << ap.type_name << ")";
-					ofs << ", ";
-					for(auto& ap : func.arg_pair)
-						ofs << "(" << ap.name << ")";
+					if(func.arg_pair.empty())
+						ofs << "(), ()";
+					else {
+						if(func.arg_pair[0].type_name == "void")
+							ofs << "(), ()";
+						else {
+							for(auto& ap : func.arg_pair)
+								ofs << "(" << ap.type_name << ")";
+							ofs << ", ";
+							for(auto& ap : func.arg_pair)
+								ofs << "(" << ap.name << ")";
+						}
+					}
 					ofs << ')' << std::endl;
 				}
 			}
 		}
+		std::cout << count << " entries exported." << std::endl;
+		std::cout << skipcount << " entries skipped." << std::endl;
 	} catch(const std::exception& e) {
 		std::cout << "error occured!" << std::endl << e.what() << std::endl;
 	}
