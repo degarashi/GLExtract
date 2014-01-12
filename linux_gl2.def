@@ -1,0 +1,2 @@
+^\s*\*\s*Miscellaneous
+^#endif.+__gl_h_

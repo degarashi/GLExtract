@@ -1,7 +1,8 @@
 ﻿/*! glext.h から関数宣言を抜き出してファイルに書き出すプログラム
 	戻り値は手抜き: 0が正常終了, 1が異常終了
-	第一引数にglext.hを, 出力は第二引数を指定 (glfunc.inc などのファイル名を与える)
-	glext.defファイルに出力させたいマクロ名を記述 (詳細は見てもらえればわかるかと)
+	第一引数に定義ファイル(ファイルに出力させたいマクロ名を記述 (詳細は見てもらえればわかるかと))
+	第二引数にglext.hを
+	出力は第三引数を指定 (glfunc.inc などのファイル名を与える)
 	
 	使う際は C++ヘッダに
 	#define GLDEFINE(name,type)		extern type name;
@@ -52,10 +53,9 @@ std::string ReadAll(std::istream& st) {
 		st.read(&ret[0], sz);
 		return std::move(ret);
 	}
-	throw std::runtime_error("can't read data from stream");
+	return std::string();
 }
 
-const std::string rs_endif("^#endif");
 struct ArgPair {
 	std::string		type_name,
 					name;
@@ -66,6 +66,39 @@ struct Func {
 	std::string		name,
 					ret_type;
 };
+
+enum ArgType {
+	Arg_Define,
+	Arg_Input,
+	Arg_Output,
+	NumArg
+};
+const char* g_arg[NumArg];
+bool g_bAppend = false;
+bool CheckArgs(int argc, char* arg[]) {
+	int current = 0;
+	// 引数をチェック
+	for(int i=1 ; i<argc ; i++) {
+		if(arg[i][0] == '-') {
+			// オプション判定
+			switch(arg[i][1]) {
+				case 'a':
+					g_bAppend = true;
+					break;
+				default:
+					std::cout << "error: unknown option " << arg[i] << std::endl;
+					return false;
+			}
+		} else
+			g_arg[current++] = arg[i];
+	}
+	if(current < NumArg) {
+		std::cout << "error: too few arguments" << std::endl;
+		return false;
+	}
+	return true;
+}
+#include <unordered_set>
 
 #ifdef USE_BOOST
 	#include <boost/regex.hpp>
@@ -90,58 +123,78 @@ struct Func {
 		using std::regex_search;
 		using std::regex_replace;
 #endif
-	if(argc != 3) {
-		std::cout << "usage: glextract [OpenGL Header(typically, glext.h)] [output filename]" << std::endl;
+	if(!CheckArgs(argc, arg)) {
+		std::cout << "usage: glextract [-a] [extraction definition file] [OpenGL Header(typically, glext.h)] [output filename]" << std::endl;
 		return 0;
 	}
-	std::string rs_proto = "^GLAPI\\s+(@C_Alnum)\\s+APIENTRY\\s+(@C_Alnum)\\s*"		// GLAPI [1=ReturnType] APIENTRY [2=FuncName]
-							"\\(((?:\\s*(?:@C_Arg),?)*)\\)";						// ([3=Args...])
-	std::string rs_args = "\\s*(@C_Arg\\s+(?:&|\\*)?(@C_Alnum))";					// [1=ArgName]
+	std::string rs_proto = "^\\s*(?:GLAPI|GL_APICALL)\\s+(@C_Alnum)\\s+(?:APIENTRY|GL_APIENTRY)\\s+(@C_Alnum)\\s*"	// GLAPI [1=ReturnType] APIENTRY [2=FuncName]
+							"\\(((?:\\s*(?:@C_Arg),?)*)\\)";														// ([3=Args...])
+	std::string rs_args = "\\s*(@C_Arg\\s+(?:&|\\*)?(@C_Alnum))";													// [1=ArgName]
+	std::string rs_define = "^\\s*GLDEFINE\\(\\s*(@C_Alnum)";
+
 	for(auto& p : replacePair) {
 		rs_proto = regex_replace(rs_proto, p.first, p.second);
 		rs_args = regex_replace(rs_args, p.first, p.second);
+		rs_define = regex_replace(rs_define, p.first, p.second);
 	}
 	regex re_proto(rs_proto),
 			re_args(rs_args),
-			re_endif(rs_endif);
+			re_define(rs_define);
 
 	try {
 		// 入力ファイル内容を全部メモリにコピー
-		std::ifstream ifs(arg[1]);
+		std::ifstream ifs(g_arg[Arg_Input]);
 		if(!ifs.is_open())
 			throw std::runtime_error("can't open input-file");
-		
+
 		std::string buff = ReadAll(ifs);
 		auto itr = buff.cbegin(),
 			itrE = buff.cend();
-			
-		// ファイル名は "glext.def" で固定
-		std::ifstream def("glext.def");
-		std::ofstream ofs(arg[2]);
+
+		std::ifstream def(g_arg[Arg_Define]);
+		if(!def.is_open())
+			throw std::runtime_error("can't open definition-file");
+		std::ios::openmode flag = std::ios::in|std::ios::out;
+		if(g_bAppend)
+			flag |= std::ios::app;
+		else
+			flag |= std::ios::trunc;
+		std::fstream ofs(g_arg[Arg_Output], flag);
 		if(!ofs.is_open())
 			throw std::runtime_error("can't open output-file");
-		
-		std::string str;
-		std::stringstream ss;
+
 		smatch res;
+		std::unordered_set<std::string>	funcsInFile;
+		//! 出力先ファイルに含まれる関数名を登録
+		if(g_bAppend) {
+			std::string oBuff = ReadAll(ofs);
+			auto itr = oBuff.cbegin(),
+				itrE = oBuff.cend();
+			while(regex_search(itr, itrE, res, re_define)) {
+				funcsInFile.insert(res[1].str());
+				itr = res.suffix().first;
+			}
+		}
+
+		std::string str[2];
+		std::stringstream ss;
 		for(;;) {
-			std::getline(def, str);
-			if(str.empty())
+			if(def.eof())
 				break;
-			
-			ss.str("");
-			ss.clear();
-			
-			ss << "^#define\\s+" << str << "\\s+1";
-			regex re_version(ss.str());
+			std::getline(def, str[0]);
+			std::getline(def, str[1]);
+			if(str[0].empty() || str[1].empty())
+				break;
+			regex re_begin(str[0]),
+					re_end(str[1]);
 			for(;;) {
 				// GLx_yのヘッダまで読み飛ばし
-				if(!regex_search(itr, itrE, res, re_version))
+				if(!regex_search(itr, itrE, res, re_begin))
 					break;
 				itr = res.suffix().first;
 
 				// 定義の終わりを検出
-				if(!regex_search(itr, itrE, res, re_endif))
+				if(!regex_search(itr, itrE, res, re_end))
 					return 1;
 				auto itrLE = res.suffix().first;
 				for(;;) {
@@ -153,17 +206,21 @@ struct Func {
 					Func func;
 					func.name = res.str(2);
 					func.ret_type = res.str(1);
+					if(g_bAppend && funcsInFile.count(func.name)!=0)
+						continue;
+					funcsInFile.insert(func.name);
 					{
 						auto itr = res[3].first,
 							itrE = res[3].second;
 						smatch res2;
-						while(regex_search(itr, itrLE, res2, re_args)) {
+						while(regex_search(itr, itrE, res2, re_args)) {
 							func.arg_pair.push_back(ArgPair{res2.str(1), res2.str(2)});
 							itr = res2.suffix().first;
 						}
 					}
 
 					ss.str("");
+					ss.clear();
 					std::string funcDef;
 					funcDef.resize(func.name.size());
 					// タイプ定義の名前を作成
