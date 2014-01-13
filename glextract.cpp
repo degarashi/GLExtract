@@ -33,6 +33,12 @@
 			return name(BOOST_PP_SEQ_ENUM(argnames)); \
 		}
 	このような感じで使うが、必要なければ空マクロにしておく
+	
+	オプション:
+	-a	出力ファイルに追記
+	-d	definition出力
+	-m	method定義出力
+	(デフォルトは両方)
 */
 
 #include <iostream>
@@ -73,6 +79,12 @@ enum ArgType {
 	Arg_Output,
 	NumArg
 };
+enum ExportType {
+	Exp_Definition = 0x01,
+	Exp_Method = 0x02,
+	Exp_All = ~0
+};
+int g_exp = 0;
 const char* g_arg[NumArg];
 bool g_bAppend = false;
 bool CheckArgs(int argc, char* arg[]) {
@@ -82,8 +94,17 @@ bool CheckArgs(int argc, char* arg[]) {
 		if(arg[i][0] == '-') {
 			// オプション判定
 			switch(arg[i][1]) {
+				// 追記モード
 				case 'a':
 					g_bAppend = true;
+					break;
+				// Definition出力
+				case 'd':
+					g_exp |= Exp_Definition;
+					break;
+				// Method出力
+				case 'm':
+					g_exp |= Exp_Method;
 					break;
 				default:
 					std::cout << "error: unknown option " << arg[i] << std::endl;
@@ -124,9 +145,12 @@ bool CheckArgs(int argc, char* arg[]) {
 		using std::regex_replace;
 #endif
 	if(!CheckArgs(argc, arg)) {
-		std::cout << "usage: glextract [-a] [extraction definition file] [OpenGL Header(typically, glext.h)] [output filename]" << std::endl;
+		std::cout << "usage: glextract [-adm] [extraction definition file] [OpenGL Header(typically, glext.h)] [output filename]" << std::endl;
 		return 0;
 	}
+	if(g_exp == 0)
+		g_exp = Exp_All;
+
 	std::string rs_proto = "^\\s*(?:WINGDIAPI|GLAPI|GL_APICALL)\\s+(@C_Alnum)\\s+(?:APIENTRY|GL_APIENTRY|GLAPIENTRY)\\s+(@C_Alnum)\\s*"	// GLAPI [1=ReturnType] APIENTRY [2=FuncName]
 							"\\(((?:\\s*(?:@C_Arg),?)*)\\)";																	// ([3=Args...])
 	std::string rs_args = "\\s*(@C_Arg\\s+(?:&|\\*)?(@C_Alnum))";																// [1=ArgName]
@@ -235,28 +259,31 @@ bool CheckArgs(int argc, char* arg[]) {
 					std::string funcDef;
 					funcDef.resize(func.name.size());
 					// タイプ定義の名前を作成
-					// :大文字変換
-					std::transform(func.name.cbegin(), func.name.cend(), funcDef.begin(), ::toupper);
-					ss << "PFN" << funcDef << "PROC";
-					// タイプ定義のアウトプット
-					ofs << "GLDEFINE(" + func.name + ',' + ss.str() + ')' << std::endl;
-
+					if(g_exp & Exp_Definition) {
+						// :大文字変換
+						std::transform(func.name.cbegin(), func.name.cend(), funcDef.begin(), ::toupper);
+						ss << "PFN" << funcDef << "PROC";
+						// タイプ定義のアウトプット
+						ofs << "GLDEFINE(" + func.name + ',' + ss.str() + ')' << std::endl;
+					}
 					// GLラッパー定義のアウトプット
-					ofs << "DEF_GLMETHOD(" << func.ret_type << ", " << func.name << ", ";
-					if(func.arg_pair.empty())
-						ofs << "(), ()";
-					else {
-						if(func.arg_pair[0].type_name == "void")
+					if(g_exp & Exp_Method) {
+						ofs << "DEF_GLMETHOD(" << func.ret_type << ", " << func.name << ", ";
+						if(func.arg_pair.empty())
 							ofs << "(), ()";
 						else {
-							for(auto& ap : func.arg_pair)
-								ofs << "(" << ap.type_name << ")";
-							ofs << ", ";
-							for(auto& ap : func.arg_pair)
-								ofs << "(" << ap.name << ")";
+							if(func.arg_pair[0].type_name == "void")
+								ofs << "(), ()";
+							else {
+								for(auto& ap : func.arg_pair)
+									ofs << "(" << ap.type_name << ")";
+								ofs << ", ";
+								for(auto& ap : func.arg_pair)
+									ofs << "(" << ap.name << ")";
+							}
 						}
+						ofs << ')' << std::endl;
 					}
-					ofs << ')' << std::endl;
 				}
 			}
 		}
