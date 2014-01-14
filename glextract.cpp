@@ -125,6 +125,7 @@ bool CheckArgs(int argc, char* arg[]) {
 	#include <boost/regex.hpp>
 	const std::pair<boost::regex, std::string> replacePair[] = {
 		{boost::regex("@C_Alnum"), "[a-zA-Z0-9_]+"},
+		{boost::regex("@C_Ret"), "[a-zA-Z0-9_ \\*&]+?"},
 		{boost::regex("@C_Arg"), "[a-zA-Z0-9_][a-zA-Z0-9_\\*& ]*"}
 	};
 	int main(int argc, char* arg[]) {
@@ -151,7 +152,7 @@ bool CheckArgs(int argc, char* arg[]) {
 	if(g_exp == 0)
 		g_exp = Exp_All;
 
-	std::string rs_proto = "^\\s*(?:WINGDIAPI|GLAPI|GL_APICALL)\\s+(@C_Alnum)\\s+(?:APIENTRY|GL_APIENTRY|GLAPIENTRY)\\s+(@C_Alnum)\\s*"	// GLAPI [1=ReturnType] APIENTRY [2=FuncName]
+	std::string rs_proto = "^\\s*(?:WINGDIAPI|GLAPI|GL_APICALL)\\s+(@C_Ret)\\s+(?:APIENTRY|GL_APIENTRY|GLAPIENTRY)\\s+(@C_Alnum)\\s*"	// GLAPI [1=ReturnType] APIENTRY [2=FuncName]
 							"\\(((?:\\s*(?:@C_Arg),?)*)\\)";																	// ([3=Args...])
 	std::string rs_args = "\\s*(@C_Arg\\s+(?:&|\\*)?(@C_Alnum))";																// [1=ArgName]
 	std::string rs_define = "^\\s*GLDEFINE\\(\\s*(@C_Alnum)";
