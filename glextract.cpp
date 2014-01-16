@@ -92,23 +92,30 @@ bool CheckArgs(int argc, char* arg[]) {
 	// 引数をチェック
 	for(int i=1 ; i<argc ; i++) {
 		if(arg[i][0] == '-') {
-			// オプション判定
-			switch(arg[i][1]) {
-				// 追記モード
-				case 'a':
-					g_bAppend = true;
+			int cur = 1;
+			for(;;) {
+				if(arg[i][cur] == '\0')
 					break;
-				// Definition出力
-				case 'd':
-					g_exp |= Exp_Definition;
-					break;
-				// Method出力
-				case 'm':
-					g_exp |= Exp_Method;
-					break;
-				default:
-					std::cout << "error: unknown option " << arg[i] << std::endl;
-					return false;
+				
+				// オプション判定
+				switch(arg[i][cur]) {
+					// 追記モード
+					case 'a':
+						g_bAppend = true;
+						break;
+					// Definition出力
+					case 'd':
+						g_exp |= Exp_Definition;
+						break;
+					// Method出力
+					case 'm':
+						g_exp |= Exp_Method;
+						break;
+					default:
+						std::cout << "error: unknown option " << arg[i] << std::endl;
+						return false;
+				}
+				++cur;
 			}
 		} else
 			g_arg[current++] = arg[i];
@@ -137,6 +144,7 @@ bool CheckArgs(int argc, char* arg[]) {
 	#include <regex>
 	const std::pair<std::regex, std::string> replacePair[] = {
 		{std::regex("@C_Alnum"), "\\[a-zA-Z0-9_\\]+"},
+		{std::regex("@C_Ret"), "\\[a-zA-Z0-9_ \\*&\\]+?"},
 		{std::regex("@C_Arg"), "\\[a-zA-Z0-9_\\]\\[a-zA-Z0-9_\\*& \\]*"}
 	};
 	int main(int argc, char* arg[]) {
