@@ -130,29 +130,35 @@ bool CheckArgs(int argc, char* arg[]) {
 
 #ifdef USE_BOOST
 	#include <boost/regex.hpp>
-	const std::pair<boost::regex, std::string> replacePair[] = {
-		{boost::regex("@C_Alnum"), "[a-zA-Z0-9_]+"},
-		{boost::regex("@C_Ret"), "[a-zA-Z0-9_ \\*&]+?"},
-		{boost::regex("@C_Arg"), "[a-zA-Z0-9_][a-zA-Z0-9_\\*& ]*"}
-	};
+	using boost::regex;
+	using boost::smatch;
+	using boost::regex_search;
+	using boost::regex_replace;
+
 	int main(int argc, char* arg[]) {
-		using boost::regex;
-		using boost::smatch;
-		using boost::regex_search;
-		using boost::regex_replace;
 #else
 	#include <regex>
-	const std::pair<std::regex, std::string> replacePair[] = {
-		{std::regex("@C_Alnum"), "\\[a-zA-Z0-9_\\]+"},
-		{std::regex("@C_Ret"), "\\[a-zA-Z0-9_ \\*&\\]+?"},
-		{std::regex("@C_Arg"), "\\[a-zA-Z0-9_\\]\\[a-zA-Z0-9_\\*& \\]*"}
-	};
+	using std::regex;
+	using std::smatch;
+	using std::regex_search;
+	using std::regex_replace;
+
 	int main(int argc, char* arg[]) {
-		using std::regex;
-		using std::smatch;
-		using std::regex_search;
-		using std::regex_replace;
 #endif
+	std::pair<regex, std::string> replacePair[] = {
+		{regex("@C_Alnum"), "[a-zA-Z0-9_]+"},
+		{regex("@C_Ret"), "[a-zA-Z0-9_ \\*&]+?"},
+		{regex("@C_Arg"), "[a-zA-Z0-9_][a-zA-Z0-9_\\*& ]*"}
+	};
+
+#ifndef USE_BOOST
+	{
+		regex re_br("(?:\\[(.+?)\\])");
+		for(auto& r : replacePair)
+			r.second = regex_replace(r.second, re_br, R"(\\[$1\\])");
+	}
+#endif
+
 	if(!CheckArgs(argc, arg)) {
 		std::cout << "usage: glextract [-adm] [extraction definition file] [OpenGL Header(typically, glext.h)] [output filename]" << std::endl;
 		return 0;
