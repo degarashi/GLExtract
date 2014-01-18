@@ -190,15 +190,18 @@ bool CheckArgs(int argc, char* arg[]) {
 		auto itr = buff.cbegin(),
 			itrE = buff.cend();
 
+		// OpenGL API定義の検出に使うRegex構文を読み込む
 		std::ifstream def(g_arg[Arg_Define]);
 		if(!def.is_open())
 			throw std::runtime_error("can't open definition-file");
 		std::ios::openmode flag = std::ios::in | std::ios::out;
+		// 追記モードでなければtruncフラグを付ける
 		if(!g_bAppend)
 			flag |= std::ios::trunc;
 		std::fstream ofs(g_arg[Arg_Output], flag);
 		if(!ofs.is_open()) {
 			bool bValid = false;
+			// 追記モードでファイルが存在しない場合はtruncフラグ付きで新規にオープン
 			if(g_bAppend) {
 				ofs.open(g_arg[Arg_Output], flag | std::ios::trunc);
 				bValid = ofs.is_open();
@@ -235,12 +238,12 @@ bool CheckArgs(int argc, char* arg[]) {
 			regex re_begin(str[0]),
 					re_end(str[1]);
 			for(;;) {
-				// GLx_yのヘッダまで読み飛ばし
+				// 定義ファイルの記述に合った箇所まで読み飛ばし -> (読み込み始める地点)
 				if(!regex_search(itr, itrE, res, re_begin))
 					break;
 				itr = res.suffix().first;
 
-				// 定義の終わりを検出
+				// 定義の終わりを検出 -> (読み込み終わりの地点)
 				if(!regex_search(itr, itrE, res, re_end))
 					return 1;
 				auto itrLE = res.suffix().first;
@@ -250,6 +253,7 @@ bool CheckArgs(int argc, char* arg[]) {
 						break;
 					itr = res.suffix().first;
 
+					// 既に出力した定義名ならばスキップ
 					Func func;
 					func.name = res.str(2);
 					func.ret_type = res.str(1);
@@ -302,6 +306,7 @@ bool CheckArgs(int argc, char* arg[]) {
 				}
 			}
 		}
+		// スキップした数と出力された数を表示
 		std::cout << count << " entries exported." << std::endl;
 		std::cout << skipcount << " entries skipped." << std::endl;
 	} catch(const std::exception& e) {
