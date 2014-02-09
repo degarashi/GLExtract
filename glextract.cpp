@@ -166,7 +166,7 @@ bool CheckArgs(int argc, char* arg[]) {
 	if(g_exp == 0)
 		g_exp = Exp_All;
 
-	std::string rs_proto = "^\\s*(?:WINGDIAPI|GLAPI|GL_APICALL)\\s+(@C_Ret)\\s+(?:APIENTRY|GL_APIENTRY|GLAPIENTRY)\\s+(@C_Alnum)\\s*"	// GLAPI [1=ReturnType] APIENTRY [2=FuncName]
+	std::string rs_proto = "^\\s*(?:WINGDIAPI|GLAPI|GL_APICALL)\\s+(@C_Ret)\\s*(?:APIENTRY|GL_APIENTRY|GLAPIENTRY)\\s+(@C_Alnum)\\s*"	// GLAPI [1=ReturnType] APIENTRY [2=FuncName]
 							"\\(((?:\\s*(?:@C_Arg),?)*)\\)";																	// ([3=Args...])
 	std::string rs_args = "\\s*(@C_Arg\\s+(?:&|\\*)?(@C_Alnum))";																// [1=ArgName]
 	std::string rs_define = "^\\s*GLDEFINE\\(\\s*(@C_Alnum)";
@@ -178,8 +178,7 @@ bool CheckArgs(int argc, char* arg[]) {
 	}
 	regex re_proto(rs_proto),
 			re_args(rs_args),
-			re_define(rs_define),
- 			re_void(".*void\\s*\\*?.*");
+			re_define(rs_define);
 	try {
 		// 入力ファイル内容を全部メモリにコピー
 		std::ifstream ifs(g_arg[Arg_Input]);
@@ -288,8 +287,7 @@ bool CheckArgs(int argc, char* arg[]) {
 					// GLラッパー定義のアウトプット
 					if(g_exp & Exp_Method) {
 						// ret_typeがvoidなら0, それ以外は1を出力
-						smatch tmp;
-						int bVoid = regex_search(func.ret_type, tmp, re_void) ? 0 : 1;
+						int bVoid = (func.ret_type == "void") ? 0 : 1;
 						ofs << "DEF_GLMETHOD(" << func.ret_type << ", " << bVoid << ", " << func.name << ", ";
 						if(func.arg_pair.empty())
 							ofs << "(), ()";
