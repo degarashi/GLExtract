@@ -27,7 +27,7 @@
 	（boostを使う時はUSE_BOOSTをdefineする）
 	
 	DEF_GLMETHOD(...)は、OpenGLの関数ラッパー用に定義
-	#define DEF_GLMETHOD(ret_type, name, args, argnames) \
+	#define DEF_GLMETHOD(ret_type, num, name, args, argnames) \
 		ret_type name(BOOST_PP_SEQ_ENUM(args)) { \
 			// 本当はエラーチェックなどする \
 			return name(BOOST_PP_SEQ_ENUM(argnames)); \
@@ -178,8 +178,8 @@ bool CheckArgs(int argc, char* arg[]) {
 	}
 	regex re_proto(rs_proto),
 			re_args(rs_args),
-			re_define(rs_define);
-
+			re_define(rs_define),
+ 			re_void(".*void\\s*\\*?.*");
 	try {
 		// 入力ファイル内容を全部メモリにコピー
 		std::ifstream ifs(g_arg[Arg_Input]);
@@ -287,7 +287,10 @@ bool CheckArgs(int argc, char* arg[]) {
 					}
 					// GLラッパー定義のアウトプット
 					if(g_exp & Exp_Method) {
-						ofs << "DEF_GLMETHOD(" << func.ret_type << ", " << func.name << ", ";
+						// ret_typeがvoidなら0, それ以外は1を出力
+						smatch tmp;
+						int bVoid = regex_search(func.ret_type, tmp, re_void) ? 0 : 1;
+						ofs << "DEF_GLMETHOD(" << func.ret_type << ", " << bVoid << ", " << func.name << ", ";
 						if(func.arg_pair.empty())
 							ofs << "(), ()";
 						else {
