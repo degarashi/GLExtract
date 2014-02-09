@@ -1,2 +1,12 @@
 ^#define\s+GL_VERSION_1_1\s+1
 ^#endif.+__gl_h_
+^#define\s+GL_VERSION_1_[2-9]\d*\s+1
+#endif
+^#define\s+GL_VERSION_2_\d+\s+1
+#endif
+^#define\s+GL_ARB_framebuffer_object\s+1
+#endif
+^#define\s+GL_ARB_sync\s+1
+#endif
+^#define\s+GL_ARB_timer_query\s+1
+#endif
