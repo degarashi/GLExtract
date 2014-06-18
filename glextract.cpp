@@ -3,7 +3,7 @@
 	第一引数に定義ファイル(ファイルに出力させたいマクロ名を記述 (詳細は見てもらえればわかるかと))
 	第二引数にglext.hを
 	出力は第三引数を指定 (glfunc.inc などのファイル名を与える)
-	
+
 	使う際は C++ヘッダに
 	#define GLDEFINE(name,type)		extern type name;
 	#include "glfunc.inc"
@@ -25,7 +25,7 @@
 
 	GCCだとregexが未実装らしく実行時エラーを吐く（？）っぽいのでその時はboostを使うなりしてください
 	（boostを使う時はUSE_BOOSTをdefineする）
-	
+
 	DEF_GLMETHOD(...)は、OpenGLの関数ラッパー用に定義
 	#define DEF_GLMETHOD(ret_type, num, name, args, argnames) \
 		ret_type name(BOOST_PP_SEQ_ENUM(args)) { \
@@ -33,7 +33,7 @@
 			return name(BOOST_PP_SEQ_ENUM(argnames)); \
 		}
 	このような感じで使うが、必要なければ空マクロにしておく
-	
+
 	オプション:
 	-a	出力ファイルに追記
 	-d	definition出力
@@ -41,6 +41,7 @@
 	(デフォルトは両方)
 */
 
+#include "glextract.hpp"
 #include <iostream>
 #include <string>
 #include <vector>
@@ -96,7 +97,7 @@ bool CheckArgs(int argc, char* arg[]) {
 			for(;;) {
 				if(arg[i][cur] == '\0')
 					break;
-				
+
 				// オプション判定
 				switch(arg[i][cur]) {
 					// 追記モード
@@ -128,54 +129,18 @@ bool CheckArgs(int argc, char* arg[]) {
 }
 #include <unordered_set>
 
-#ifdef USE_BOOST
-	#include <boost/regex.hpp>
-	using boost::regex;
-	using boost::smatch;
-	using boost::regex_search;
-	using boost::regex_replace;
-
-	int main(int argc, char* arg[]) {
-#else
-	#include <regex>
-	using std::regex;
-	using std::smatch;
-	using std::regex_search;
-	using std::regex_replace;
-
-	int main(int argc, char* arg[]) {
-#endif
-	std::pair<regex, std::string> replacePair[] = {
-		{regex("@C_Alnum"), "[a-zA-Z0-9_]+"},
-		{regex("@C_Ret"), "[a-zA-Z0-9_ \\*&]+?"},
-		{regex("@C_Arg"), "[a-zA-Z0-9_][a-zA-Z0-9_\\*& ]*"}
-	};
-
-#ifndef USE_BOOST
-	{
-		regex re_br("(?:\\[(.+?)\\])");
-		for(auto& r : replacePair)
-			r.second = regex_replace(r.second, re_br, R"(\\[$1\\])");
-	}
-#endif
-
+int main(int argc, char* arg[]) {
 	if(!CheckArgs(argc, arg)) {
 		std::cout << "usage: glextract [-adm] [extraction definition file] [OpenGL Header(typically, glext.h)] [output filename]" << std::endl;
-		return 0;
+		return 1;
 	}
 	if(g_exp == 0)
 		g_exp = Exp_All;
 
-	std::string rs_proto = "^\\s*(?:WINGDIAPI|GLAPI|GL_APICALL)\\s+(@C_Ret)\\s*(?:APIENTRY|GL_APIENTRY|GLAPIENTRY)\\s+(@C_Alnum)\\s*"	// GLAPI [1=ReturnType] APIENTRY [2=FuncName]
-							"\\(((?:\\s*(?:@C_Arg),?)*)\\)";																	// ([3=Args...])
-	std::string rs_args = "\\s*(@C_Arg\\s+(?:&|\\*)?(@C_Alnum))";																// [1=ArgName]
-	std::string rs_define = "^\\s*GLDEFINE\\(\\s*(@C_Alnum)";
-
-	for(auto& p : replacePair) {
-		rs_proto = regex_replace(rs_proto, p.first, p.second);
-		rs_args = regex_replace(rs_args, p.first, p.second);
-		rs_define = regex_replace(rs_define, p.first, p.second);
-	}
+	std::string rs_proto = "^\\s*(?:WINGDIAPI|GLAPI|GL_APICALL)\\s+(" REP_RET ")\\s*(?:APIENTRY|GL_APIENTRY|GLAPIENTRY)\\s+(" REP_ALNUM ")\\s*"	// GLAPI [1=ReturnType] APIENTRY [2=FuncName]
+							"\\(((?:\\s*(?:" REP_ARG "),?)*)\\)";																				// ([3=Args...])
+	std::string rs_args = "\\s*(" REP_ARG "\\s+(?:&|\\*)?(" REP_ALNUM "))";																		// [1=ArgName]
+	std::string rs_define = "^\\s*GLDEFINE\\(\\s*(" REP_ALNUM ")";
 	regex re_proto(rs_proto),
 			re_args(rs_args),
 			re_define(rs_define);
