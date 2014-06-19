@@ -4,5 +4,5 @@ project(glextract)
 set(CMAKE_CXX_COMPILER clang++)
 set(CMAKE_CXX_FLAGS "-std=c++11 -Wall")
 
-add_executable(glextract glextract.cpp)
+add_executable(glextract glextract.cpp glextract_const.cpp)
 target_link_libraries(glextract boost_regex)

@@ -137,13 +137,6 @@ int main(int argc, char* arg[]) {
 	if(g_exp == 0)
 		g_exp = Exp_All;
 
-	std::string rs_proto = "^\\s*(?:WINGDIAPI|GLAPI|GL_APICALL)\\s+(" REP_RET ")\\s*(?:APIENTRY|GL_APIENTRY|GLAPIENTRY)\\s+(" REP_ALNUM ")\\s*"	// GLAPI [1=ReturnType] APIENTRY [2=FuncName]
-							"\\(((?:\\s*(?:" REP_ARG "),?)*)\\)";																				// ([3=Args...])
-	std::string rs_args = "\\s*(" REP_ARG "\\s+(?:&|\\*)?(" REP_ALNUM "))";																		// [1=ArgName]
-	std::string rs_define = "^\\s*GLDEFINE\\(\\s*(" REP_ALNUM ")";
-	regex re_proto(rs_proto),
-			re_args(rs_args),
-			re_define(rs_define);
 	try {
 		// 入力ファイル内容を全部メモリにコピー
 		std::ifstream ifs(g_arg[Arg_Input]);
@@ -188,19 +181,22 @@ int main(int argc, char* arg[]) {
 		}
 		ofs.seekp(0, std::ios::end);
 
-		std::string str[2];
+		std::string strMacro,
+					strReBegin,
+					strReEnd;
 		std::stringstream ss;
 		int count = 0,
 			skipcount = 0;
 		for(;;) {
 			if(def.eof())
 				break;
-			std::getline(def, str[0]);
-			std::getline(def, str[1]);
-			if(str[0].empty() || str[1].empty())
+			std::getline(def, strMacro);		// マクロ名
+			std::getline(def, strReBegin);		// RegEx構文(Begin)
+			std::getline(def, strReEnd);		// RegEx構文(End)
+			if(strMacro.empty() || strReBegin.empty() || strReEnd.empty())
 				break;
-			regex re_begin(str[0]),
-					re_end(str[1]);
+			regex re_begin(strReBegin),
+					re_end(strReEnd);
 			for(;;) {
 				// 定義ファイルの記述に合った箇所まで読み飛ばし -> (読み込み始める地点)
 				if(!regex_search(itr, itrE, res, re_begin))
@@ -210,6 +206,8 @@ int main(int argc, char* arg[]) {
 				// 定義の終わりを検出 -> (読み込み終わりの地点)
 				if(!regex_search(itr, itrE, res, re_end))
 					return 1;
+
+				bool bDef = true;
 				auto itrLE = res.suffix().first;
 				for(;;) {
 					// プロトタイプ宣言の名前を取得
@@ -226,6 +224,12 @@ int main(int argc, char* arg[]) {
 						continue;
 					}
 					++count;
+					if(bDef) {
+						bDef = false;
+						// マクロ名を書き出す
+						ofs << "#ifdef " << strMacro << std::endl;
+					}
+
 					funcsInFile.insert(func.name);
 					{
 						auto itr = res[3].first,
@@ -270,6 +274,8 @@ int main(int argc, char* arg[]) {
 						ofs << ')' << std::endl;
 					}
 				}
+				if(!bDef)
+					ofs << "#endif" << std::endl;
 			}
 		}
 		// スキップした数と出力された数を表示

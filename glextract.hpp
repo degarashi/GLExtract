@@ -22,3 +22,10 @@
 	#define REP_ARG		"\\[a-zA-Z0-9_\\]\\[a-zA-Z0-9_\\*& \\]*"
 #endif
 
+extern const std::string	rs_proto,
+							rs_args,
+							rs_define;
+extern const regex			re_proto,
+							re_args,
+							re_define;
+
