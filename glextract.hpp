@@ -10,6 +10,8 @@
 	#define REP_ALNUM	"[a-zA-Z0-9_]+"
 	#define REP_RET		"[a-zA-Z0-9_ \\*&]+?"
 	#define REP_ARG		"[a-zA-Z0-9_][a-zA-Z0-9_\\*& ]*"
+	#define REP_ToRB	"[^\\)]*"
+	#define REP_ToCamma	"[^,]*"
 #else
 	#include <regex>
 	using std::regex;
@@ -20,12 +22,13 @@
 	#define REP_ALNUM	"\\[a-zA-Z0-9_\\]+"
 	#define REP_RET		"\\[a-zA-Z0-9_ \\*&\\]+?"
 	#define REP_ARG		"\\[a-zA-Z0-9_\\]\\[a-zA-Z0-9_\\*& \\]*"
+	#define REP_ToRB	"\\[^\\)\\]*"
+	#define REP_ToCamma	"\\[^,\\]*"
 #endif
 
-extern const std::string	rs_proto,
-							rs_args,
-							rs_define;
 extern const regex			re_proto,
 							re_args,
-							re_define;
-
+							re_define,
+							re_gldefine,
+							re_gldefmethod,
+							re_gldefconst;

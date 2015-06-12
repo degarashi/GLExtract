@@ -4,6 +4,7 @@
 	第二引数にglext.hを
 	出力は第三引数を指定 (glfunc.inc などのファイル名を与える)
 
+	---- Definition出力 ----
 	使う際は C++ヘッダに
 	#define GLDEFINE(name,type)		extern type name;
 	#include "glfunc.inc"
@@ -26,6 +27,7 @@
 	GCCだとregexが未実装らしく実行時エラーを吐く（？）っぽいのでその時はboostを使うなりしてください
 	（boostを使う時はUSE_BOOSTをdefineする）
 
+	---- Method定義出力 ----
 	DEF_GLMETHOD(...)は、OpenGLの関数ラッパー用に定義
 	#define DEF_GLMETHOD(ret_type, num, name, args, argnames) \
 		ret_type name(BOOST_PP_SEQ_ENUM(args)) { \
@@ -34,13 +36,16 @@
 		}
 	このような感じで使うが、必要なければ空マクロにしておく
 
+	---- Const変数定義出力 ----
+	DEF_GLCONST(name, value) マクロを定義のこと
+
 	オプション:
 	-a	出力ファイルに追記
 	-d	definition出力
 	-m	method定義出力
+	-c	const変数定義出力
 	(デフォルトは両方)
 */
-
 #include "glextract.hpp"
 #include <iostream>
 #include <string>
@@ -83,6 +88,7 @@ enum ArgType {
 enum ExportType {
 	Exp_Definition = 0x01,
 	Exp_Method = 0x02,
+	Exp_Const = 0x04,
 	Exp_All = ~0
 };
 int g_exp = 0;
@@ -111,6 +117,10 @@ bool CheckArgs(int argc, char* arg[]) {
 					// Method出力
 					case 'm':
 						g_exp |= Exp_Method;
+						break;
+					// Const変数出力
+					case 'c':
+						g_exp |= Exp_Const;
 						break;
 					default:
 						std::cout << "error: unknown option " << arg[i] << std::endl;
@@ -144,8 +154,6 @@ int main(int argc, char* arg[]) {
 			throw std::runtime_error("can't open input-file");
 
 		std::string buff = ReadAll(ifs);
-		auto itr = buff.cbegin(),
-			itrE = buff.cend();
 
 		// OpenGL API定義の検出に使うRegex構文を読み込む
 		std::ifstream def(g_arg[Arg_Define]);
@@ -168,25 +176,54 @@ int main(int argc, char* arg[]) {
 		}
 
 		smatch res;
-		std::unordered_set<std::string>	funcsInFile;
+		std::unordered_set<std::string>	funcsInFile,
+										constsInFile;
 		//! 出力先ファイルに含まれる関数名を登録
 		if(g_bAppend) {
 			std::string oBuff = ReadAll(ofs);
-			auto itr = oBuff.cbegin(),
-				itrE = oBuff.cend();
-			while(regex_search(itr, itrE, res, re_define)) {
-				funcsInFile.insert(res[1].str());
-				itr = res.suffix().first;
-			}
+			auto fnAddName = [&oBuff, &res](auto& m, const auto& re, int idx){
+				auto itr = oBuff.cbegin(),
+					itrE = oBuff.cend();
+				while(regex_search(itr, itrE, res, re)) {
+					m.insert(res[idx].str());
+					itr = res.suffix().first;
+				}
+			};
+			fnAddName(funcsInFile, re_gldefine, 1);
+			fnAddName(funcsInFile, re_gldefmethod, 1);
+			fnAddName(constsInFile, re_gldefconst, 1);
 		}
 		ofs.seekp(0, std::ios::end);
 
+		int count = 0,
+			skipcount = 0;
+		// ---------------- Const変数の検索と出力 ----------------
+		if(g_exp & Exp_Const) {
+			auto itr = buff.cbegin(),
+				 itrE = buff.cend();
+			for(;;) {
+				if(!regex_search(itr, itrE, res, re_define))
+					break;
+				itr = res.suffix().first;
+				// 既に出力した定義名ならばスキップ
+				const auto &name = res.str(1);
+				if(constsInFile.count(name) == 0) {
+					constsInFile.insert(name);
+					const auto &value = res.str(2);
+					ofs << "DEF_GLCONST(" << name << ", 0x" << value << ')' << std::endl;
+					++count;
+				} else
+					++skipcount;
+			}
+		}
+		// ---------------- Definition, Method の検索と出力 ----------------
+		auto itr = buff.cbegin(),
+			itrE = buff.cend();
+		// 関数出力は別途用意したマクロ記述で範囲を制限
 		std::string strMacro,
 					strReBegin,
 					strReEnd;
 		std::stringstream ss;
-		int count = 0,
-			skipcount = 0;
 		for(;;) {
 			if(def.eof())
 				break;
